@@ -58,26 +58,29 @@ public Action Timer_Speedmeter(Handle timer)
 	
 	for (int i = 1; i <= MaxClients; i++)
 	{
-		if (IsClientInGame(i) && IsPlayerAlive(i) && !IsFakeClient(i))
+		if (IsClientInGame(i) && !IsFakeClient(i))
 		{
-			buttons = GetClientButtons(i);
-			
-			GetEntPropVector(i, Prop_Data, "m_vecVelocity", vec);
-			
-			PrepareHudText(hudtext, sizeof(hudtext), vec, speed, buttons);
-			ShowHudText(i, -1, hudtext);
-		}
-		else if (IsClientInGame(i) && IsClientObserver(i) && !IsFakeClient(i))
-		{
-			int target = GetEntPropEnt(i, Prop_Data, "m_hObserverTarget");
-			if (target != -1)
+			if (IsPlayerAlive(i))
 			{
-				buttons = GetClientButtons(target);
+				buttons = GetClientButtons(i);
 			
-				GetEntPropVector(target, Prop_Data, "m_vecVelocity", vec);
+				GetEntPropVector(i, Prop_Data, "m_vecVelocity", vec);
 			
 				PrepareHudText(hudtext, sizeof(hudtext), vec, speed, buttons);
 				ShowHudText(i, -1, hudtext);
+			}
+			else if (IsClientObserver(i))
+			{
+				int target = GetEntPropEnt(i, Prop_Data, "m_hObserverTarget");
+				if (target != -1)
+				{
+					buttons = GetClientButtons(target);
+			
+					GetEntPropVector(target, Prop_Data, "m_vecVelocity", vec);
+			
+					PrepareHudText(hudtext, sizeof(hudtext), vec, speed, buttons);
+					ShowHudText(i, -1, hudtext);
+				}
 			}
 		}
 	}
