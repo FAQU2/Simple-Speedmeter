@@ -4,6 +4,9 @@
 #pragma semicolon 1
 #pragma newdecls required
 
+Handle g_Sync;
+Handle g_Timer;
+
 ConVar gc_Mode;
 ConVar gc_Keys;
 ConVar gc_PosX;
@@ -25,7 +28,7 @@ public Plugin myinfo =
 	name = "Simple Speedmeter",
 	author = "FAQU",
 	description = "HUD text showing player's speed and keys",
-	version = "1.0",
+	version = "1.1",
 	url = "https://github.com/FAQU2"
 };
 
@@ -46,101 +49,70 @@ public void OnPluginStart()
 public void OnConfigsExecuted()
 {
 	SaveConvarData();
-	CreateTimer(0.10, Timer_Speedmeter, _, TIMER_REPEAT|TIMER_FLAG_NO_MAPCHANGE);
+	
+	g_Sync = CreateHudSynchronizer();
+	g_Timer = CreateTimer(0.10, Timer_Speedmeter, _, TIMER_REPEAT);
+}
+
+public void OnMapEnd()
+{
+	delete g_Sync;
+	delete g_Timer;
 }
 
 public Action Timer_Speedmeter(Handle timer)
 {
-	char hudtext[64];
-	float vec[3];
-	int speed;
-	int buttons;
-	
 	for (int i = 1; i <= MaxClients; i++)
 	{
-		if (IsClientInGame(i) && !IsFakeClient(i))
+		if (!IsClientInGame(i) || IsFakeClient(i))
 		{
-			if (IsPlayerAlive(i))
+			continue;
+		}
+		
+		static char text[64];
+		static float vec[3];
+		static int target, speed, buttons;
+		
+		if (IsPlayerAlive(i))
+		{
+			buttons = GetClientButtons(i);
+			GetEntPropVector(i, Prop_Data, "m_vecVelocity", vec);
+		}
+		else if (IsClientObserver(i))
+		{
+			target = GetEntPropEnt(i, Prop_Data, "m_hObserverTarget");
+			if (target == -1)
 			{
-				buttons = GetClientButtons(i);
-			
-				GetEntPropVector(i, Prop_Data, "m_vecVelocity", vec);
-			
-				PrepareHudText(hudtext, sizeof(hudtext), vec, speed, buttons);
-				ShowHudText(i, -1, hudtext);
+				continue;
 			}
-			else if (IsClientObserver(i))
+			buttons = GetClientButtons(target);
+			GetEntPropVector(target, Prop_Data, "m_vecVelocity", vec);
+		}
+		
+		switch (bMode)
+		{
+			case 0: speed = RoundFloat(SquareRoot(vec[0] * vec[0] + vec[1] * vec[1]));
+			case 1: speed = RoundFloat(SquareRoot(vec[0] * vec[0] + vec[1] * vec[1] + vec[2] * vec[2]));
+		}
+		
+		switch (bKeys)
+		{
+			case 0: FormatEx(text, sizeof(text), "Speed: %i units/s", speed);
+			case 1:
 			{
-				int target = GetEntPropEnt(i, Prop_Data, "m_hObserverTarget");
-				if (target != -1)
-				{
-					buttons = GetClientButtons(target);
-			
-					GetEntPropVector(target, Prop_Data, "m_vecVelocity", vec);
-			
-					PrepareHudText(hudtext, sizeof(hudtext), vec, speed, buttons);
-					ShowHudText(i, -1, hudtext);
-				}
+				FormatEx(text, sizeof(text), "Speed: %i units/s\n\n%s   %s   %s\n%s   %s   %s", speed,
+												(buttons & IN_DUCK == IN_DUCK) ? "C":"_",
+												(buttons & IN_FORWARD == IN_FORWARD) ? "W":"_",
+												(buttons & IN_JUMP == IN_JUMP) ? "J":"_",
+												(buttons & IN_MOVELEFT == IN_MOVELEFT) ? "A":"_", 
+												(buttons & IN_BACK == IN_BACK) ? "S":"_", 
+												(buttons & IN_MOVERIGHT == IN_MOVERIGHT) ? "D":"_");
 			}
 		}
+										
+		SetHudTextParams(fPosX, fPosY, 0.15, iRed, iGreen, iBlue, iAlpha, 0, 0.0, 0.0, 0.0);
+		ShowSyncHudText(i, g_Sync, text);
 	}
-}
-
-///////////////////////////////////
-// Functions
-///////////////////////////////////
-
-void PrepareHudText(char[] string, int maxlength, float vec[3], int speed, int buttons)
-{
-	if (!bMode)
-	{
-		speed = RoundFloat(SquareRoot(vec[0] * vec[0] + vec[1] * vec[1]));
-	}
-	else speed = RoundFloat(SquareRoot(vec[0] * vec[0] + vec[1] * vec[1] + vec[2] * vec[2]));
-			
-			
-	FormatEx(string, maxlength, "Speed: %i u/s", speed);
-	
-	if (bKeys)
-	{
-		if (buttons & IN_DUCK)
-		{
-			Format(string, maxlength, "%s\n\nC", string);
-		}
-		else Format(string, maxlength, "%s\n\n_", string);
-			
-		if (buttons & IN_FORWARD)
-		{
-			Format(string, maxlength, "%s  W", string);
-		}
-		else Format(string, maxlength, "%s  _", string);
-			
-		if (buttons & IN_JUMP)
-		{
-			Format(string, maxlength, "%s  J", string);
-		}
-		else Format(string, maxlength, "%s  _", string);
-			
-		if (buttons & IN_MOVELEFT)
-		{
-			Format(string, maxlength, "%s\nA", string);
-		}
-		else Format(string, maxlength, "%s\n_", string);
-			
-		if (buttons & IN_BACK)
-		{
-			Format(string, maxlength, "%s  S", string);
-		}
-		else Format(string, maxlength, "%s  _", string);
-			
-		if (buttons & IN_MOVERIGHT)
-		{
-			Format(string, maxlength, "%s  D", string);
-		}
-		else Format(string, maxlength, "%s  _", string);
-	}
-	
-	SetHudTextParams(fPosX, fPosY, 0.12, iRed, iGreen, iBlue, iAlpha, 0, 0.0, 0.0, 0.0);
 }
 
 void SaveConvarData()
@@ -161,10 +133,6 @@ void SaveConvarData()
 	iGreen = StringToInt(colors[1]);
 	iBlue = StringToInt(colors[2]);
 }
-
-///////////////////////////////////
-// Hooks
-///////////////////////////////////
 
 void HookAllConvars()
 {
